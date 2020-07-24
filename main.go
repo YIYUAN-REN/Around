@@ -15,6 +15,10 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/pborman/uuid" // uuid：保证每个id都是unique
+
+	jwtmiddleware "github.com/auth0/go-jwt-middleware"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gorilla/mux"
 )
 
 // (相当于servlet, struct相当于class)
@@ -44,6 +48,8 @@ const ( // const相当于final
 	// Needs to update this bucket based on your gcs bucket name.
 	BUCKET_NAME = "post-images-284203"
 )
+
+var mySigningKey = []byte("secret") // signing key
 
 func main() {
 	// Create a client, 往后每个endpoint都要创建新client，为了保持一个连接
@@ -80,6 +86,25 @@ func main() {
 
 	// 启动service
 	fmt.Println("started-service")
+
+	// Here we are instantiating the gorilla/mux router
+	r := mux.NewRouter() //
+
+	var jwtMiddleware = jwtmiddleware.New(jwtmiddleware.Options{
+		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) { // 从JWT token里拿到key
+			return mySigningKey, nil
+		},
+		SigningMethod: jwt.SigningMethodHS256,
+	})
+
+	r.Handle("/post", jwtMiddleware.Handler(http.HandlerFunc(handlerPost))).Methods("POST") // 用router来handle请求，jwtMiddleware加在中间目的是验证(相当于token到server后验证): 验证router和signing key能否对上，若能对上再转交给http handler
+	r.Handle("/search", jwtMiddleware.Handler(http.HandlerFunc(handlerSearch))).Methods("GET")
+	r.Handle("/login", http.HandlerFunc(loginHandler)).Methods("POST") // 为什么不用jwtMiddleware：用户需输入账户密码，token还没产生
+	r.Handle("/signup", http.HandlerFunc(signupHandler)).Methods("POST")
+
+	http.Handle("/", r) // 把router返回
+	log.Fatal(http.ListenAndServe(":8080", nil))
+
 	http.HandleFunc("/post", handlerPost) // 呼叫endpoint(相当于servlet里的doPost，这里函数就可以实现doPost功能)
 	http.HandleFunc("/search", handlerSearch)
 	/*				endpoint	保存endpoint用的函数					*/
@@ -118,6 +143,11 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
 
 	/* 2. parse form data */
+	// 从token读出用户名
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
+
 	r.ParseMultipartForm(32 << 20) // 提交form的最大32 MB
 
 	fmt.Printf("Received one post request %s\n", r.FormValue("message")) // 打印检测到的数据
@@ -126,7 +156,7 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	lon, _ := strconv.ParseFloat(r.FormValue("lon"), 64)
 	// 解析message + 重新拼一下
 	p := &Post{ // 为了防止拷贝
-		User:    "1111",
+		User:    username.(string),
 		Message: r.FormValue("message"),
 		Location: Location{
 			Lat: lat,
