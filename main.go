@@ -1,15 +1,16 @@
 package main
 
 import (
+	elastic "gopkg.in/olivere/elastic.v3"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"reflect"
 	"strconv"
-
 	"github.com/pborman/uuid"
-	elastic "gopkg.in/olivere/elastic.v3"
+
+
 )
 
 // (相当于servlet, struct相当于class)
