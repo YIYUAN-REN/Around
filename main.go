@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/pborman/uuid" // handlerPost使用
+	"github.com/pborman/uuid"
 	elastic "gopkg.in/olivere/elastic.v3"
 )
 
@@ -33,7 +33,7 @@ const ( // const相当于final
 	//PROJECT_ID = "around-xxx"
 	//BT_INSTANCE = "around-post"
 	// Needs to update this URL if you deploy it to cloud.
-	ES_URL = "http://35.222.162.131:9200"
+	ES_URL = "http://35.224.139.198:9200"
 )
 
 func main() {
