@@ -8,7 +8,11 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/pborman/uuid"
+	"context"
+	"io"
+
+	"cloud.google.com/go/storage"
+	"github.com/pborman/uuid" // uuid：保证每个id都是unique
 	elastic "gopkg.in/olivere/elastic.v3"
 )
 
@@ -23,6 +27,7 @@ type Post struct {
 	User     string   `json:"user"`
 	Message  string   `json:"message"`
 	Location Location `json:"location"`
+	Url      string   `json:"url"`
 }
 
 const ( // const相当于final
@@ -34,6 +39,9 @@ const ( // const相当于final
 	//BT_INSTANCE = "around-post"
 	// Needs to update this URL if you deploy it to cloud.
 	ES_URL = "http://35.224.139.198:9200"
+
+	// Needs to update this bucket based on your gcs bucket name.
+	BUCKET_NAME = "post-images-284203"
 )
 
 func main() {
@@ -92,17 +100,100 @@ http request的Json格式：
 func handlerPost(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Receive one post request.") // 先提示用户表示进入函数
 
-	// decoder获得Json格式的string，再decode成Go的数据结构
-	decoder := json.NewDecoder(r.Body) // (r.Body相当于*r.body)
-	var p Post
-	if err := decoder.Decode(&p); err != nil { // 若error，抛出异常。(';'表示两个statments --- 初始化+判断), (panic相当于Java的throw), (Decode直接在p上修改，返回error或者no error)
-		panic(err)
+	/*
+		// decoder获得Json格式的string，再decode成Go的数据结构
+		decoder := json.NewDecoder(r.Body) // (r.Body相当于*r.body)
+		var p Post
+		if err := decoder.Decode(&p); err != nil { // 若error，抛出异常。(';'表示两个statments --- 初始化+判断), (panic相当于Java的throw), (Decode直接在p上修改，返回error或者no error)
+			panic(err)
+		}
+	*/
+
+	// 不用JSON而是用 multipart form
+
+	/* 1. 用于前端 */
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+
+	/* 2. parse form data */
+	r.ParseMultipartForm(32 << 20) // 提交form的最大32 MB
+
+	fmt.Printf("Received one post request %s\n", r.FormValue("message")) // 打印检测到的数据
+	// 解析lat和lon
+	lat, _ := strconv.ParseFloat(r.FormValue("lat"), 64)
+	lon, _ := strconv.ParseFloat(r.FormValue("lon"), 64)
+	// 解析message + 重新拼一下
+	p := &Post{ // 为了防止拷贝
+		User:    "1111",
+		Message: r.FormValue("message"),
+		Location: Location{
+			Lat: lat,
+			Lon: lon,
+		},
 	}
 
-	fmt.Fprintf(w, "Post received: %s\n", p.Message) // 告诉用户读到的内容.(Fprint表示file print)
-
 	id := uuid.New()
-	saveToES(&p, id) // save to ES
+
+	// 解析image
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "Image is not available", http.StatusInternalServerError) // (也可以用panic)
+		fmt.Printf("Image is not available %v.\n", err)
+		return
+	}
+	defer file.Close()
+
+	/* 3. GCS */
+	ctx := context.Background()
+
+	// replace it with your real bucket name.
+	_, attrs, err := saveToGCS(ctx, file, BUCKET_NAME, id) // attrs里面有提交到GCS后创建的URL
+	if err != nil {
+		http.Error(w, "GCS is not setup", http.StatusInternalServerError)
+		fmt.Printf("GCS is not setup %v\n", err)
+		return
+	}
+
+	// Update the media link after saving to GCS.
+	p.Url = attrs.MediaLink
+
+	saveToES(p, id) // save to ES，p是指针
+
+}
+
+func saveToGCS(ctx context.Context, r io.Reader, bucketName, name string) (*storage.ObjectHandle, *storage.ObjectAttrs, error) {
+	// 1. client用来操作bucket
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer client.Close()
+
+	// 2. 创建bucket
+	bucket := client.Bucket(bucketName)
+	// Next check if the bucket exists
+	if _, err = bucket.Attrs(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	obj := bucket.Object(name) //文件名是uuid
+	w := obj.NewWriter(ctx)
+	if _, err := io.Copy(w, r); err != nil {
+		return nil, nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, nil, err
+	}
+
+	// 文件写完没有人能读，所以修改权限
+	if err := obj.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		return nil, nil, err
+	}
+
+	attrs, err := obj.Attrs(ctx) // 获取刚创建文件的属性
+	fmt.Printf("Post is saved to GCS: %s\n", attrs.MediaLink)
+	return obj, attrs, err
 }
 
 func saveToES(p *Post, id string) {
