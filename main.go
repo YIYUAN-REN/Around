@@ -8,12 +8,13 @@ import (
 	"reflect"
 	"strconv"
 
+	elastic "gopkg.in/olivere/elastic.v3"
+
 	"context"
 	"io"
 
 	"cloud.google.com/go/storage"
 	"github.com/pborman/uuid" // uuid：保证每个id都是unique
-	elastic "gopkg.in/olivere/elastic.v3"
 )
 
 // (相当于servlet, struct相当于class)
