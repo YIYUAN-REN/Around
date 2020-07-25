@@ -103,7 +103,7 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received one signup request") // 表明进入函数
 
 	// 解码
-	decoder := json.NewDecoder(r.Body) // 判断json读取是否出错，当然前端会保证它正确
+	decoder := json.NewDecoder(r.Body) // 判断json读取是否出错，当然前端会保证它正确（signup传的是json(username,password,age,gender)，decode这个json）
 	var u User
 	if err := decoder.Decode(&u); err != nil {
 		panic(err)
@@ -114,7 +114,7 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 	if u.Username != "" && u.Password != "" && usernamePattern(u.Username) {
 		if addUser(u) {
 			fmt.Println("User added successfully.")     // 打印成功
-			w.Write([]byte("User added successfully.")) // 客户端返回成功，双保险
+			w.Write([]byte("User added successfully.")) // 客户端返回成功，双保险（网络传输一定要用byte）
 		} else {
 			fmt.Println("Failed to add a new user.")
 			http.Error(w, "Failed to add a new user", http.StatusInternalServerError)
@@ -152,7 +152,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		tokenString, _ := token.SignedString(mySigningKey) // 用token sign一下string(sign string过程 = 生成VERIFY SIGNITURE过程)
 
 		/* Finally, write the token to the browser window */
-		w.Write([]byte(tokenString))
+		w.Write([]byte(tokenString)) //（网络传输一定要用byte）
 	} else {
 		fmt.Println("Invalid password or username.")
 		http.Error(w, "Invalid password or username", http.StatusForbidden)

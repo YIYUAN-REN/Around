@@ -19,6 +19,8 @@ import (
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
+
+	"cloud.google.com/go/bigtable"
 )
 
 // (相当于servlet, struct相当于class)
@@ -40,8 +42,8 @@ const ( // const相当于final
 	TYPE     = "post"
 	DISTANCE = "200km"
 	// Needs to update
-	//PROJECT_ID = "around-xxx"
-	//BT_INSTANCE = "around-post"
+	PROJECT_ID  = "around-284203"
+	BT_INSTANCE = "around-post"
 	// Needs to update this URL if you deploy it to cloud.
 	ES_URL = "http://35.224.139.198:9200"
 
@@ -190,6 +192,35 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	p.Url = attrs.MediaLink
 
 	saveToES(p, id) // save to ES，p是指针
+
+	saveToBigTable(p, id) // save to BigTable，同时存ElasticSearch和BigTable
+
+}
+
+func saveToBigTable(p *Post, id string) {
+	ctx := context.Background()
+	// you must update project name here
+	bt_client, err := bigtable.NewClient(ctx, PROJECT_ID, BT_INSTANCE) // 创建好bt_client
+	if err != nil {
+		panic(err)
+		return
+	}
+
+	tbl := bt_client.Open("post") // 打开post table
+	mut := bigtable.NewMutation() // one row
+	t := bigtable.Now()           // timestamp
+
+	mut.Set("post", "user", t, []byte(p.User))
+	mut.Set("post", "message", t, []byte(p.Message))
+	mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
+	mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
+
+	err = tbl.Apply(ctx, id, mut)
+	if err != nil {
+		panic(err)
+		return
+	}
+	fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
 
 }
 
