@@ -43,13 +43,13 @@ const ( // const相当于final
 	//PROJECT_ID = "around-xxx"
 	//BT_INSTANCE = "around-post"
 	// Needs to update this URL if you deploy it to cloud.
-	ES_URL = "http://104.155.165.168:9200"
+	ES_URL = "http://35.224.139.198:9200"
 
 	// Needs to update this bucket based on your gcs bucket name.
 	BUCKET_NAME = "post-images-284203"
 )
 
-var mySigningKey = []byte("secret") // signing key
+var mySigningKey = []byte("secret") // signing key，private key就是secret
 
 func main() {
 	// Create a client, 往后每个endpoint都要创建新client，为了保持一个连接
