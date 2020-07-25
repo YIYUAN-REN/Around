@@ -98,7 +98,7 @@ func addUser(user User) bool {
 	return true
 }
 
-// 若注册成功，创建新token
+// 若注册成功，创建新token，返回成功说明
 func signupHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received one signup request") // 表明进入函数
 
@@ -128,7 +128,7 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // 所有人都可访问
 }
 
-// 若登录成功，创建新token
+// 若登录成功，创建新token，返回token
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received one login request")
 
@@ -143,7 +143,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// 若匹配成功，则生成token发给用户
 	if checkUser(u.Username, u.Password) {
 		token := jwt.New(jwt.SigningMethodHS256) // jwt生成token
-		claims := token.Claims.(jwt.MapClaims)   // 取出claim转化成map格式，(claim就是HEADER.PAYLOAD.VERIFY SIGNITURE中的PAYLOAD)
+		claims := token.Claims.(jwt.MapClaims)   // 取出claim(默认interface格式)转化成map格式(go可用)，(claim就是HEADER.PAYLOAD.VERIFY SIGNITURE中的PAYLOAD)
 		/* Set token claims */
 		claims["username"] = u.Username
 		claims["exp"] = time.Now().Add(time.Hour * 24).Unix() // claim写进过期时间
